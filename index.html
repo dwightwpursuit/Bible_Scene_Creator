@@ -1,3 +1,23 @@
+import requests
+
+# This is the Python version that was meant to be illustrative of the logic.
+# The JavaScript version below is what goes into index.html
+
+def get_bible_verse_text(parsed_reference: dict) -> str | None:
+    """
+    Retrieves the full text of a Bible verse or range of verses from bible-api.com.
+
+    Args:
+        parsed_reference (dict): A dictionary containing 'book', 'chapter',
+                                 'start_verse', and 'end_verse' (from validate_bible_reference).
+
+    Returns:
+        str: The concatenated text of the requested Bible verse(s).
+        None: If there's an error during the API call or data parsing, along with
+              a printed error message.
+    """
+    # ... (rest of the Python code remains the same as before if you want to keep it)
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,7 +25,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bible Story Scene Creator</title>
     <!-- Tailwind CSS CDN for styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
     <style>
         /* Custom styles for Inter font and general body aesthetics */
         body {
@@ -35,6 +55,10 @@
         .message-box.error {
             background-color: #fee2e2; /* Red for error */
             color: #991b1b;
+        }
+        .message-box.info {
+            background-color: #e0f2fe; /* Blue for info */
+            color: #0369a1;
         }
     </style>
 </head>
@@ -95,7 +119,7 @@
         <div id="imageContainer" class="flex justify-center items-center h-80 bg-gray-200 rounded-xl overflow-hidden shadow-inner hidden">
             <img id="generatedImage" src="" alt="Generated Bible Scene" class="max-w-full max-h-full object-contain rounded-xl">
             <div id="loadingSpinner" class="hidden">
-                <svg class="animate-spin h-10 w-10 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg class="animate-spin h-10 w-10 text-blue-500" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
@@ -114,7 +138,7 @@
         const lookupButton = document.getElementById('lookupButton');
 
         function showMessage(type, message) {
-            messageArea.classList.remove('hidden', 'success', 'error');
+            messageArea.classList.remove('hidden', 'success', 'error', 'info');
             messageArea.classList.add(type);
             messageArea.textContent = message;
         }
@@ -172,35 +196,39 @@
             }
             clearMessages();
             return {
-                book: book.trim().toLowerCase(), // Normalize for API call
+                book: book.trim(), // Keep original casing for better API matching, but trim
                 chapter: parseInt(chapter),
                 start_verse: parsedVerse,
                 end_verse: parsedEndVerse
             };
         }
 
-        // --- Function to Get Bible Verse Text (JS Equivalent of Python's get_bible_verse_text) ---
+        // --- Corrected Function to Get Bible Verse Text (JS Equivalent of Python's get_bible_verse_text) ---
         async function getBibleVerseTextJS(parsedReference) {
             const book = parsedReference.book;
             const chapter = parsedReference.chapter;
             const startVerse = parsedReference.start_verse;
             const endVerse = parsedReference.end_verse;
 
-            let apiUrl = `https://bible-api.com/<span class="math-inline">\{book\}\+</span>{chapter}`;
+            // Corrected: Use backticks (`) for template literals and ${} for variable interpolation
+            let apiUrl = `https://bible-api.com/${book}+${chapter}`;
 
             if (startVerse !== null) {
                 if (endVerse !== null) {
-                    apiUrl += `:<span class="math-inline">\{startVerse\}\-</span>{endVerse}`;
+                    apiUrl += `:${startVerse}-${endVerse}`;
                 } else {
                     apiUrl += `:${startVerse}`;
                 }
             }
+            // bible-api.com doesn't require a translation param for KJV, but if you wanted
+            // a specific version for other APIs, you might add: `?translation=kjv`
 
             try {
                 const response = await fetch(apiUrl);
                 if (!response.ok) {
                     if (response.status === 404) {
-                        throw new Error('Verse not found. Please check the reference.');
+                        // The API returns 404 if the book/chapter/verse combo is not found
+                        throw new Error('Verse not found. Please check the reference (e.g., Book Chapter:Verse).');
                     } else {
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
@@ -209,8 +237,9 @@
 
                 if (data && data.verses && Array.isArray(data.verses)) {
                     let combinedText = data.verses.map(v => {
-                        let cleanText = v.text.replace(/\s+/g, ' ').trim(); // Replace multiple spaces/newlines with single space
-                        // Prepend verse number for clarity if it's a chapter or range, but not single verse
+                        // Clean and replace multiple spaces/newlines with single space
+                        let cleanText = v.text.replace(/\s+/g, ' ').trim();
+                        // Prepend verse number for clarity if it's a chapter or range
                         if (startVerse === null || (startVerse !== endVerse && endVerse !== null)) {
                             return `${v.verse_number}. ${cleanText}`;
                         }
@@ -271,7 +300,6 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify(payload),
-                    // No timeout option for fetch directly. Use AbortController for advanced timeout.
                 });
 
                 if (!response.ok) {
@@ -282,7 +310,7 @@
                 const result = await response.json();
 
                 if (result.predictions && result.predictions.length > 0 && result.predictions[0].bytesBase64Encoded) {
-                    const imageBase64 = result.predictions[0].bytesBase64Encoded;
+                    const imageBase64 = result.predictions[0]["bytesBase64Encoded"];
                     const imageUrl = `data:image/png;base64,${imageBase64}`;
                     generatedImage.src = imageUrl;
                     generatedImage.classList.remove('hidden');
@@ -308,7 +336,7 @@
             clearMessages();
             verseDisplayArea.classList.add('hidden');
             generatedImage.classList.add('hidden');
-            imageContainer.classList.add('hidden');
+            imageContainer.classList.add('hidden'); // Also hide the image container to clear spinner
             generateButton.disabled = true;
             generateButton.classList.add('opacity-50', 'cursor-not-allowed');
 
@@ -348,13 +376,12 @@
             showMessage('info', 'Sending request to AI...'); // Inform user we're sending
             // The loading spinner will be handled by callImagenAPI
             const imageUrl = await callImagenAPI(finalPrompt);
-            // The image will be displayed by callImagenAPI
+            // The image will be displayed by callImagenAPI and success/error message
         });
 
         // Initial state: Disable generate button
         generateButton.disabled = true;
         generateButton.classList.add('opacity-50', 'cursor-not-allowed');
-
     </script>
 </body>
 </html>
