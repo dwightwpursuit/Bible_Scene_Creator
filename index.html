@@ -168,6 +168,7 @@
 
         // --- Function to Validate Bible Reference (JS Equivalent of Python's validate_bible_reference) ---
         function validateBibleReferenceJS(book, chapter, verse) {
+            console.log("Validating reference:", { book, chapter, verse }); // Debug log
             if (!book || !chapter) {
                 showMessage('error', 'Please enter at least a Book and Chapter.');
                 return null;
@@ -197,6 +198,7 @@
                 }
             }
             clearMessages();
+            console.log("Validation successful, parsed reference:", { book: book.trim(), chapter: parseInt(chapter), start_verse: parsedVerse, end_verse: parsedEndVerse }); // Debug log
             return {
                 book: book.trim(),
                 chapter: parseInt(chapter),
@@ -221,6 +223,7 @@
                     apiUrl += `:${startVerse}`;
                 }
             }
+            console.log("Bible API URL:", apiUrl); // Debug log
 
             try {
                 const response = await fetch(apiUrl);
@@ -232,6 +235,7 @@
                     }
                 }
                 const data = await response.json();
+                console.log("Bible API Response data:", data); // Debug log
 
                 if (data && data.verses && Array.isArray(data.verses)) {
                     let combinedText = data.verses.map(v => {
@@ -375,6 +379,7 @@
 
         // --- Event Listeners ---
         lookupButton.addEventListener('click', async () => {
+            console.log("Look Up Verse button clicked!"); // Debug log to ensure button click is registered
             clearMessages();
             verseDisplayArea.classList.add('hidden');
             generatedImage.classList.add('hidden');
@@ -392,10 +397,12 @@
             const verse = verseInput.value;
 
             const parsedRef = validateBibleReferenceJS(book, chapter, verse);
+            console.log("Parsed Reference from validation:", parsedRef); // Debug log
 
             if (parsedRef) {
                 showMessage('info', 'Retrieving verse text...');
                 currentVerseText = await getBibleVerseTextJS(parsedRef);
+                console.log("Retrieved Verse Text:", currentVerseText); // Debug log
                 if (currentVerseText) {
                     verseDisplayArea.textContent = currentVerseText;
                     verseDisplayArea.classList.remove('hidden');
