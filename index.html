@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bible Story Scene Creator</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for Inter font and general body aesthetics */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+        }
+        .container {
+            max-width: 90%; /* Fluid width for responsiveness */
+        }
+        @media (min-width: 768px) {
+            .container {
+                max-width: 768px; /* Max width for larger screens */
+            }
+        }
+        /* Styling for message boxes (success/error) */
+        .message-box {
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            text-align: center;
+        }
+        .message-box.success {
+            background-color: #d1fae5; /* Green for success */
+            color: #065f46;
+        }
+        .message-box.error {
+            background-color: #fee2e2; /* Red for error */
+            color: #991b1b;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+    <div class="container bg-white p-8 rounded-xl shadow-lg w-full">
+        <h1 class="text-4xl font-bold text-center text-gray-800 mb-6">Bible Story Scene Creator</h1>
+        <p class="text-center text-gray-600 mb-8">
+            Enter a Bible verse to generate a unique visual interpretation.
+        </p>
+
+        <div class="space-y-4 mb-8">
+            <!-- Verse Input Fields -->
+            <div class="flex flex-col md:flex-row gap-4">
+                <input type="text" id="bookInput" placeholder="Book (e.g., John, Ps)"
+                       class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="number" id="chapterInput" placeholder="Chapter (e.g., 3)"
+                       class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="verseInput" placeholder="Verse(s) (e.g., 16 or 1-5)"
+                       class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+
+            <!-- Style Selection Dropdown -->
+            <select id="styleSelect"
+                    class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                <option value="">No Specific Style</option>
+                <option value="realistic photography">Realistic Photography</option>
+                <option value="oil painting">Oil Painting</option>
+                <option value="watercolor drawing">Watercolor Drawing</option>
+                <option value="cartoon drawing">Cartoon Drawing</option>
+                <option value="ancient fresco">Ancient Fresco</option>
+                <option value="vibrant digital art">Vibrant Digital Art</option>
+                <option value="minimalist illustration">Minimalist Illustration</option>
+                <option value="pencil sketch">Pencil Sketch</option>
+            </select>
+
+            <!-- Buttons -->
+            <div class="flex flex-col md:flex-row gap-4">
+                <button id="lookupButton"
+                        class="flex-1 bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-300 ease-in-out shadow-md">
+                    Look Up Verse
+                </button>
+                <button id="generateButton" disabled
+                        class="flex-1 bg-green-600 text-white p-3 rounded-lg font-semibold hover:bg-green-700 transition duration-300 ease-in-out shadow-md opacity-50 cursor-not-allowed">
+                    Generate Image
+                </button>
+            </div>
+        </div>
+
+        <!-- Messages and Verse Display -->
+        <div id="messageArea" class="message-box hidden"></div>
+
+        <div id="verseDisplayArea"
+             class="bg-gray-100 p-4 rounded-lg text-gray-700 italic text-center mb-8 hidden">
+            <!-- Retrieved verse text will appear here -->
+        </div>
+
+        <!-- Image Display Area -->
+        <div id="imageContainer" class="flex justify-center items-center h-80 bg-gray-200 rounded-xl overflow-hidden shadow-inner hidden">
+            <img id="generatedImage" src="" alt="Generated Bible Scene" class="max-w-full max-h-full object-contain rounded-xl">
+            <div id="loadingSpinner" class="hidden">
+                <svg class="animate-spin h-10 w-10 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Helper Functions for UI feedback ---
+        const messageArea = document.getElementById('messageArea');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const generatedImage = document.getElementById('generatedImage');
+        const imageContainer = document.getElementById('imageContainer');
+        const verseDisplayArea = document.getElementById('verseDisplayArea');
+        const generateButton = document.getElementById('generateButton');
+        const lookupButton = document.getElementById('lookupButton');
+
+        function showMessage(type, message) {
+            messageArea.classList.remove('hidden', 'success', 'error');
+            messageArea.classList.add(type);
+            messageArea.textContent = message;
+        }
+
+        function clearMessages() {
+            messageArea.classList.add('hidden');
+            messageArea.textContent = '';
+        }
+
+        function showLoading(elementId) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.classList.remove('hidden');
+            }
+        }
+
+        function hideLoading(elementId) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.classList.add('hidden');
+            }
+        }
+
+        // --- Function to Validate Bible Reference (JS Equivalent of Python's validate_bible_reference) ---
+        function validateBibleReferenceJS(book, chapter, verse) {
+            // Simplified validation for browser context.
+            // In a production app, more robust parsing and validation (like the Python one) would be needed.
+            if (!book || !chapter) {
+                showMessage('error', 'Please enter at least a Book and Chapter.');
+                return null;
+            }
+
+            if (isNaN(parseInt(chapter)) || parseInt(chapter) <= 0) {
+                showMessage('error', 'Chapter must be a positive number.');
+                return null;
+            }
+
+            let parsedVerse = null;
+            let parsedEndVerse = null;
+
+            if (verse) {
+                const verseParts = verse.split('-').map(v => parseInt(v.trim()));
+                if (verseParts.some(isNaN) || verseParts.some(v => v <= 0)) {
+                    showMessage('error', 'Verse(s) must be positive numbers or a valid range (e.g., 16 or 1-5).');
+                    return null;
+                }
+                parsedVerse = verseParts[0];
+                if (verseParts.length > 1) {
+                    parsedEndVerse = verseParts[1];
+                    if (parsedEndVerse < parsedVerse) {
+                        showMessage('error', 'End verse cannot be less than start verse.');
+                        return null;
+                    }
+                }
+            }
+            clearMessages();
+            return {
+                book: book.trim().toLowerCase(), // Normalize for API call
+                chapter: parseInt(chapter),
+                start_verse: parsedVerse,
+                end_verse: parsedEndVerse
+            };
+        }
+
+        // --- Function to Get Bible Verse Text (JS Equivalent of Python's get_bible_verse_text) ---
+        async function getBibleVerseTextJS(parsedReference) {
+            const book = parsedReference.book;
+            const chapter = parsedReference.chapter;
+            const startVerse = parsedReference.start_verse;
+            const endVerse = parsedReference.end_verse;
+
+            let apiUrl = `https://bible-api.com/<span class="math-inline">\{book\}\+</span>{chapter}`;
+
+            if (startVerse !== null) {
+                if (endVerse !== null) {
+                    apiUrl += `:<span class="math-inline">\{startVerse\}\-</span>{endVerse}`;
+                } else {
+                    apiUrl += `:${startVerse}`;
+                }
+            }
+
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        throw new Error('Verse not found. Please check the reference.');
+                    } else {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                }
+                const data = await response.json();
+
+                if (data && data.verses && Array.isArray(data.verses)) {
+                    let combinedText = data.verses.map(v => {
+                        let cleanText = v.text.replace(/\s+/g, ' ').trim(); // Replace multiple spaces/newlines with single space
+                        // Prepend verse number for clarity if it's a chapter or range, but not single verse
+                        if (startVerse === null || (startVerse !== endVerse && endVerse !== null)) {
+                            return `${v.verse_number}. ${cleanText}`;
+                        }
+                        return cleanText;
+                    }).join(' '); // Join with a single space
+
+                    if (combinedText.length === 0) {
+                        throw new Error('No text found for the provided reference.');
+                    }
+                    return combinedText;
+                } else {
+                    throw new Error('Unexpected API response format for Bible verse.');
+                }
+            } catch (error) {
+                console.error('Error fetching Bible verse:', error);
+                showMessage('error', `Failed to retrieve verse: ${error.message}`);
+                return null;
+            }
+        }
+
+        // --- Function to Generate Image Prompt (JS Equivalent of Python's generate_image_prompt) ---
+        function generateImagePromptJS(verseText, style) {
+            if (!verseText) {
+                console.warn("generateImagePromptJS received empty verseText.");
+                return "";
+            }
+
+            if (style && style.trim()) {
+                return `${verseText}, in the style of a ${style.trim()}.`;
+            } else {
+                return verseText;
+            }
+        }
+
+        // --- Function to Call AI Image Generation (JS Equivalent of Python's generate_and_display_image) ---
+        async function callImagenAPI(imagePrompt) {
+            clearMessages();
+            showLoading('loadingSpinner');
+            imageContainer.classList.remove('hidden'); // Show container for spinner
+            generatedImage.classList.add('hidden'); // Hide previous image
+
+            const apiKey = ""; // Canvas will provide this at runtime. DO NOT change.
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+
+            const payload = {
+                instances: {
+                    prompt: imagePrompt
+                },
+                parameters: {
+                    sampleCount: 1
+                }
+            };
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload),
+                    // No timeout option for fetch directly. Use AbortController for advanced timeout.
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`API error: ${response.status} - ${errorData.error ? errorData.error.message : 'Unknown error'}`);
+                }
+
+                const result = await response.json();
+
+                if (result.predictions && result.predictions.length > 0 && result.predictions[0].bytesBase64Encoded) {
+                    const imageBase64 = result.predictions[0].bytesBase64Encoded;
+                    const imageUrl = `data:image/png;base64,${imageBase64}`;
+                    generatedImage.src = imageUrl;
+                    generatedImage.classList.remove('hidden');
+                    showMessage('success', 'Image generated successfully!');
+                    return imageUrl;
+                } else {
+                    throw new Error('Unexpected API response structure or no image generated.');
+                }
+            } catch (error) {
+                console.error('Error generating image:', error);
+                generatedImage.src = ""; // Clear any previous image
+                showMessage('error', `Image generation failed: ${error.message}`);
+                return null;
+            } finally {
+                hideLoading('loadingSpinner');
+            }
+        }
+
+        // --- Event Listeners ---
+        let currentVerseText = ""; // Variable to store the retrieved verse text
+
+        document.getElementById('lookupButton').addEventListener('click', async () => {
+            clearMessages();
+            verseDisplayArea.classList.add('hidden');
+            generatedImage.classList.add('hidden');
+            imageContainer.classList.add('hidden');
+            generateButton.disabled = true;
+            generateButton.classList.add('opacity-50', 'cursor-not-allowed');
+
+            const book = document.getElementById('bookInput').value;
+            const chapter = document.getElementById('chapterInput').value;
+            const verse = document.getElementById('verseInput').value;
+
+            const parsedRef = validateBibleReferenceJS(book, chapter, verse);
+
+            if (parsedRef) {
+                showMessage('info', 'Retrieving verse text...');
+                currentVerseText = await getBibleVerseTextJS(parsedRef);
+                if (currentVerseText) {
+                    verseDisplayArea.textContent = currentVerseText;
+                    verseDisplayArea.classList.remove('hidden');
+                    showMessage('success', 'Verse retrieved! Ready to generate image.');
+                    generateButton.disabled = false;
+                    generateButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                } else {
+                    // Error message already shown by getBibleVerseTextJS
+                    currentVerseText = ""; // Clear text if retrieval failed
+                }
+            } else {
+                currentVerseText = ""; // Clear text if validation failed
+            }
+        });
+
+        document.getElementById('generateButton').addEventListener('click', async () => {
+            if (!currentVerseText) {
+                showMessage('error', 'Please look up a Bible verse first.');
+                return;
+            }
+
+            const selectedStyle = document.getElementById('styleSelect').value;
+            const finalPrompt = generateImagePromptJS(currentVerseText, selectedStyle);
+
+            showMessage('info', 'Sending request to AI...'); // Inform user we're sending
+            // The loading spinner will be handled by callImagenAPI
+            const imageUrl = await callImagenAPI(finalPrompt);
+            // The image will be displayed by callImagenAPI
+        });
+
+        // Initial state: Disable generate button
+        generateButton.disabled = true;
+        generateButton.classList.add('opacity-50', 'cursor-not-allowed');
+
+    </script>
+</body>
+</html>
