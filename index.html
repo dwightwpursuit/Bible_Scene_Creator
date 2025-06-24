@@ -138,6 +138,14 @@
              class="bg-blue-50 p-4 rounded-lg text-blue-800 italic text-center mb-8 border border-blue-200 hidden"> <!-- Softer blue background -->
             <!-- Retrieved verse text will appear here -->
         </div>
+        <!-- View Verse Online Button -->
+        <div class="flex justify-center mb-8">
+            <button id="viewOnlineButton" disabled
+                    class="bg-teal-600 text-white p-3 rounded-lg font-semibold hover:bg-teal-700 transition duration-300 ease-in-out shadow-md opacity-50 cursor-not-allowed flex items-center justify-center">
+                <i class="fas fa-external-link-alt mr-2"></i> View Verse Online
+            </button>
+        </div>
+
 
         <!-- Image Display Area -->
         <div id="imageContainer" class="relative flex flex-col justify-center items-center h-80 bg-gray-200 rounded-xl overflow-hidden shadow-inner p-4">
@@ -170,6 +178,13 @@
                 <p class="text-center text-gray-500 col-span-full" id="noSavedVersesMessage">No scenes saved yet. Generate and save one above!</p>
                 <!-- Saved scenes will be dynamically loaded here -->
             </div>
+            <!-- New Clear All Saved Scenes Button -->
+            <div class="flex justify-center mt-6">
+                <button id="clearAllSavedButton" disabled
+                        class="bg-red-600 text-white p-3 rounded-lg font-semibold hover:bg-red-700 transition duration-300 ease-in-out shadow-md opacity-50 cursor-not-allowed flex items-center justify-center">
+                    <i class="fas fa-trash-alt mr-2"></i> Clear All Saved Scenes
+                </button>
+            </div>
         </div>
     </div>
 
@@ -186,6 +201,8 @@
         const clearButton = document.getElementById('clearButton');
         const downloadButton = document.getElementById('downloadButton');
         const saveButton = document.getElementById('saveButton');
+        const viewOnlineButton = document.getElementById('viewOnlineButton'); // Changed from copyVerseButton
+        const clearAllSavedButton = document.getElementById('clearAllSavedButton');
         const messageArea = document.getElementById('messageArea');
         const verseDisplayArea = document.getElementById('verseDisplayArea');
         const imageContainer = document.getElementById('imageContainer');
@@ -263,11 +280,16 @@
 
         // --- Rendering Saved Scenes List ---
         function renderSavedScenes() {
-            savedVersesList.innerHTML = '';
+            savedVersesList.innerHTML = ''; // Clear current list
             if (savedScenes.length === 0) {
-                showLoading(noSavedVersesMessage);
+                showLoading(noSavedVersesMessage); // Show "No scenes saved yet."
+                clearAllSavedButton.disabled = true; // Disable clear all button
+                clearAllSavedButton.classList.add('opacity-50', 'cursor-not-allowed');
             } else {
-                hideLoading(noSavedVersesMessage);
+                hideLoading(noSavedVersesMessage); // Hide it
+                clearAllSavedButton.disabled = false; // Enable clear all button
+                clearAllSavedButton.classList.remove('opacity-50', 'cursor-not-allowed');
+
                 savedScenes.forEach((scene, index) => {
                     const sceneElement = document.createElement('div');
                     sceneElement.id = `saved-scene-${scene.id}`;
@@ -301,7 +323,7 @@
                     // Add click listener for delete button
                     const deleteButton = sceneElement.querySelector('.delete-btn');
                     deleteButton.addEventListener('click', (event) => {
-                        event.stopPropagation(); // Prevent load event from firing on parent
+                        event.stopPropagation(); // Prevent load event from firing
                         deleteScene(scene.id);
                     });
                 });
@@ -310,27 +332,29 @@
 
         // --- Load Saved Scene into Main App ---
         function loadSceneIntoMainApp(scene) {
-            clearForm(false);
+            clearForm(); // Clear the form and reset state before loading
 
-            bookInput.value = scene.reference.split(' ')[0];
-            const chapVerse = scene.reference.split(' ').slice(1).join(' ');
-            if (chapVerse.includes(':')) {
-                chapterInput.value = chapVerse.split(':')[0];
-                verseInput.value = chapVerse.split(':')[1];
+            // Populate inputs - IMPROVED LOGIC FOR BOOK NAME
+            const refParts = scene.reference.split(/ (.+)/); // Split at first space to separate book from rest
+            bookInput.value = refParts[0];
+            const chapterVersePart = refParts[1]; // e.g., "3:16" or "13:4-7" or "23"
+
+            if (chapterVersePart.includes(':')) {
+                const parts = chapterVersePart.split(':');
+                chapterInput.value = parts[0];
+                verseInput.value = parts[1];
             } else {
-                chapterInput.value = chapVerse;
+                // If no colon, it's just a chapter number (e.g., "Psalms 23")
+                chapterInput.value = chapterVersePart;
                 verseInput.value = '';
             }
+
             styleSelect.value = scene.style || '';
 
             currentVerseText = scene.verse_text;
             currentImageUrl = scene.image_url;
-            currentParsedRef = {
-                book: bookInput.value.trim(),
-                chapter: parseInt(chapterInput.value),
-                start_verse: scene.reference.includes(':') ? parseInt(scene.reference.split(':')[1].split('-')[0]) : null,
-                end_verse: scene.reference.includes(':') && scene.reference.split(':')[1].includes('-') ? parseInt(scene.reference.split(':')[1].split('-')[1]) : null
-            };
+            // Reconstruct currentParsedRef fully based on loaded values to enable re-generation
+            currentParsedRef = validateBibleReferenceJS(bookInput.value, chapterInput.value, verseInput.value);
             currentStyle = scene.style || '';
 
             verseDisplayArea.textContent = currentVerseText;
@@ -346,6 +370,8 @@
             downloadButton.classList.remove('opacity-50', 'cursor-not-allowed');
             saveButton.disabled = false;
             saveButton.classList.remove('opacity-50', 'cursor-not-allowed');
+            viewOnlineButton.disabled = false; // Enable View Online button on load
+            viewOnlineButton.classList.remove('opacity-50', 'cursor-not-allowed');
 
             showMessage('info', `Loaded scene for: ${scene.reference}`);
         }
@@ -356,6 +382,17 @@
             saveScenesToLocalStorage();
             renderSavedScenes();
             showMessage('success', 'Scene deleted.');
+        }
+
+        // --- Clear All Saved Scenes Function ---
+        function clearAllSavedScenes() {
+            if (confirm("Are you sure you want to delete ALL saved scenes? This cannot be undone.")) {
+                savedScenes = [];
+                saveScenesToLocalStorage();
+                renderSavedScenes();
+                showMessage('success', 'All saved scenes have been cleared.');
+                clearForm(); // Also reset the main form for a fresh start
+            }
         }
 
 
@@ -462,7 +499,6 @@
 
         // --- Function to Call AI Image Generation (JS Equivalent of Python's generate_and_display_image) ---
         async function callImagenAPI(imagePrompt) {
-            console.log("callImagenAPI: Starting image generation request."); // Debug 1
             clearMessages();
             hideLoading(imagePlaceholder);
             showLoading(loadingSpinner);
@@ -474,7 +510,7 @@
             saveButton.classList.add('opacity-50', 'cursor-not-allowed');
 
 
-            const apiKey = "AIzaSyCJM5r1NpQbR5y1KhEeSsBtcV4qgWyaGm4"; // IMPORTANT: Replace with your actual Google Cloud API Key for GitHub Pages!
+            const apiKey = "YOUR_ACTUAL_GOOGLE_CLOUD_API_KEY_HERE"; // IMPORTANT: Replace with your actual Google Cloud API Key for GitHub Pages!
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
 
             const payload = {
@@ -486,9 +522,6 @@
                 }
             };
 
-            console.log("callImagenAPI: Sending payload:", payload); // Debug 2
-            console.log("callImagenAPI: API URL:", apiUrl); // Debug 3
-
             try {
                 const response = await fetch(apiUrl, {
                     method: 'POST',
@@ -497,16 +530,13 @@
                     },
                     body: JSON.stringify(payload),
                 });
-                console.log("callImagenAPI: Fetch request completed. Checking response status."); // Debug 4
 
                 if (!response.ok) {
                     const errorData = await response.json();
-                    console.error("callImagenAPI: API returned non-OK status:", response.status, errorData); // Debug 5
                     throw new Error(`API error: ${response.status} - ${errorData.error ? errorData.error.message : 'Unknown error'}`);
                 }
 
                 const result = await response.json();
-                console.log("callImagenAPI: Received API result:", result); // Debug 6
 
                 if (result.predictions && result.predictions.length > 0 && result.predictions[0].bytesBase64Encoded) {
                     const imageBase64 = result.predictions[0]["bytesBase64Encoded"];
@@ -519,14 +549,14 @@
                     downloadButton.classList.remove('opacity-50', 'cursor-not-allowed');
                     saveButton.disabled = false;
                     saveButton.classList.remove('opacity-50', 'cursor-not-allowed');
-                    console.log("callImagenAPI: Image displayed and buttons enabled."); // Debug 7
+                    viewOnlineButton.disabled = false; // Enable view online button
+                    viewOnlineButton.classList.remove('opacity-50', 'cursor-not-allowed');
                     return imageUrl;
                 } else {
-                    console.error("callImagenAPI: Unexpected API response structure or no image generated."); // Debug 8
                     throw new Error('Unexpected API response structure or no image generated.');
                 }
             } catch (error) {
-                console.error('Error generating image:', error); // Debug 9
+                console.error('Error generating image:', error);
                 generatedImage.src = "";
                 currentImageUrl = "";
                 generatedImage.classList.add('hidden');
@@ -535,7 +565,6 @@
                 return null;
             } finally {
                 hideLoading(loadingSpinner);
-                console.log("callImagenAPI: Finally block executed (spinner hidden)."); // Debug 10
             }
         }
 
@@ -550,33 +579,39 @@
             const fullReference = `${currentParsedRef.book} ${currentParsedRef.chapter}${currentParsedRef.start_verse ? ':' + currentParsedRef.start_verse : ''}${currentParsedRef.end_verse ? '-' + currentParsedRef.end_verse : ''}`;
 
             // Check if this exact verse and style combo is already saved
-            const isAlreadySaved = savedScenes.some(scene =>
+            const existingIndex = savedScenes.findIndex(scene =>
                 scene.reference === fullReference &&
                 scene.style === currentStyle
             );
 
-            if (isAlreadySaved) {
-                showMessage('info', 'This scene is already saved!');
-                return;
+            if (existingIndex !== -1) {
+                // Update existing scene if re-saving the same one
+                savedScenes[existingIndex] = {
+                    ...savedScenes[existingIndex], // Keep existing ID, etc.
+                    verse_text: currentVerseText,
+                    image_url: currentImageUrl,
+                    timestamp: new Date().toISOString()
+                };
+                showMessage('info', 'This scene was updated!');
+            } else {
+                const newScene = {
+                    id: Date.now().toString(), // Simple unique ID
+                    reference: fullReference,
+                    verse_text: currentVerseText,
+                    image_url: currentImageUrl,
+                    style: currentStyle,
+                    timestamp: new Date().toISOString(),
+                    is_favorite: true // Mark as favorite automatically when saved
+                };
+                savedScenes.unshift(newScene); // Add to the beginning of the array
+                showMessage('success', 'Scene saved to favorites!');
             }
 
-            const newScene = {
-                id: Date.now().toString(), // Simple unique ID
-                reference: fullReference,
-                verse_text: currentVerseText,
-                image_url: currentImageUrl,
-                style: currentStyle,
-                timestamp: new Date().toISOString(),
-                is_favorite: true // Mark as favorite automatically when saved
-            };
-
-            savedScenes.unshift(newScene); // Add to the beginning of the array
             saveScenesToLocalStorage();
             renderSavedScenes();
-            showMessage('success', 'Scene saved to favorites!');
         }
 
-        // --- Clear Form Function (modified to allow not clearing savedScenes) ---
+        // --- Clear Form Function ---
         function clearForm() {
             bookInput.value = '';
             chapterInput.value = '';
@@ -599,6 +634,8 @@
             downloadButton.classList.add('opacity-50', 'cursor-not-allowed');
             saveButton.disabled = true;
             saveButton.classList.add('opacity-50', 'cursor-not-allowed');
+            viewOnlineButton.disabled = true; // Disable view online button
+            viewOnlineButton.classList.add('opacity-50', 'cursor-not-allowed');
             imageContainer.classList.remove('hidden'); // Ensure container is visible to show placeholder
         }
 
@@ -624,6 +661,32 @@
             }
         }
 
+        // --- View Verse Online Function ---
+        function viewVerseOnline() {
+            if (!currentParsedRef) {
+                showMessage('error', 'No verse selected to view online.');
+                return;
+            }
+
+            // Construct BibleGateway URL
+            // Example: https://www.biblegateway.com/passage/?search=John+3%3A16&version=KJV
+            // BibleGateway automatically handles full book names and abbreviations
+            const bookParam = encodeURIComponent(currentParsedRef.book.replace(/\s/g, '+'));
+            const chapterParam = currentParsedRef.chapter;
+            let verseParam = '';
+            if (currentParsedRef.start_verse) {
+                verseParam = `:${currentParsedRef.start_verse}`;
+                if (currentParsedRef.end_verse) {
+                    verseParam += `-${currentParsedRef.end_verse}`;
+                }
+            }
+
+            const bibleGatewayUrl = `https://www.biblegateway.com/passage/?search=${bookParam}+${chapterParam}${verseParam}&version=KJV`; // Default to KJV
+            
+            window.open(bibleGatewayUrl, '_blank'); // Open in a new tab
+            showMessage('info', 'Opening verse in a new tab...');
+        }
+
 
         // --- Event Listeners ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -646,6 +709,8 @@
                 downloadButton.classList.add('opacity-50', 'cursor-not-allowed');
                 saveButton.disabled = true;
                 saveButton.classList.add('opacity-50', 'cursor-not-allowed');
+                viewOnlineButton.disabled = true; // Disable view online button on new lookup
+                viewOnlineButton.classList.add('opacity-50', 'cursor-not-allowed');
 
 
                 const book = bookInput.value;
@@ -665,13 +730,19 @@
                         showMessage('success', 'Verse retrieved! Ready to generate image.');
                         generateButton.disabled = false;
                         generateButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                        viewOnlineButton.disabled = false; // Enable view online button after verse retrieval
+                        viewOnlineButton.classList.remove('opacity-50', 'cursor-not-allowed');
                     } else {
                         currentVerseText = "";
                         currentParsedRef = null;
+                        viewOnlineButton.disabled = true; // Ensure disabled on error
+                        viewOnlineButton.classList.add('opacity-50', 'cursor-not-allowed');
                     }
                 } else {
                     currentVerseText = "";
                     currentParsedRef = null;
+                    viewOnlineButton.disabled = true; // Ensure disabled on error
+                    viewOnlineButton.classList.add('opacity-50', 'cursor-not-allowed');
                 }
             });
 
@@ -691,6 +762,8 @@
             clearButton.addEventListener('click', clearForm);
             downloadButton.addEventListener('click', downloadImage);
             saveButton.addEventListener('click', saveCurrentScene);
+            viewOnlineButton.addEventListener('click', viewVerseOnline); // Attach view online function
+            clearAllSavedButton.addEventListener('click', clearAllSavedScenes);
 
             // Initial setup on page load
             clearForm();
