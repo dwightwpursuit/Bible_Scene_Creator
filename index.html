@@ -462,6 +462,7 @@
 
         // --- Function to Call AI Image Generation (JS Equivalent of Python's generate_and_display_image) ---
         async function callImagenAPI(imagePrompt) {
+            console.log("callImagenAPI: Starting image generation request."); // Debug 1
             clearMessages();
             hideLoading(imagePlaceholder);
             showLoading(loadingSpinner);
@@ -473,7 +474,7 @@
             saveButton.classList.add('opacity-50', 'cursor-not-allowed');
 
 
-            const apiKey = "YOUR_ACTUAL_GOOGLE_CLOUD_API_KEY_HERE"; // Placeholder. Replace with your key for GitHub Pages!
+            const apiKey = "YOUR_ACTUAL_GOOGLE_CLOUD_API_KEY_HERE"; // IMPORTANT: Replace with your actual Google Cloud API Key for GitHub Pages!
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
 
             const payload = {
@@ -485,6 +486,9 @@
                 }
             };
 
+            console.log("callImagenAPI: Sending payload:", payload); // Debug 2
+            console.log("callImagenAPI: API URL:", apiUrl); // Debug 3
+
             try {
                 const response = await fetch(apiUrl, {
                     method: 'POST',
@@ -493,13 +497,16 @@
                     },
                     body: JSON.stringify(payload),
                 });
+                console.log("callImagenAPI: Fetch request completed. Checking response status."); // Debug 4
 
                 if (!response.ok) {
                     const errorData = await response.json();
+                    console.error("callImagenAPI: API returned non-OK status:", response.status, errorData); // Debug 5
                     throw new Error(`API error: ${response.status} - ${errorData.error ? errorData.error.message : 'Unknown error'}`);
                 }
 
                 const result = await response.json();
+                console.log("callImagenAPI: Received API result:", result); // Debug 6
 
                 if (result.predictions && result.predictions.length > 0 && result.predictions[0].bytesBase64Encoded) {
                     const imageBase64 = result.predictions[0]["bytesBase64Encoded"];
@@ -512,12 +519,14 @@
                     downloadButton.classList.remove('opacity-50', 'cursor-not-allowed');
                     saveButton.disabled = false;
                     saveButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                    console.log("callImagenAPI: Image displayed and buttons enabled."); // Debug 7
                     return imageUrl;
                 } else {
+                    console.error("callImagenAPI: Unexpected API response structure or no image generated."); // Debug 8
                     throw new Error('Unexpected API response structure or no image generated.');
                 }
             } catch (error) {
-                console.error('Error generating image:', error);
+                console.error('Error generating image:', error); // Debug 9
                 generatedImage.src = "";
                 currentImageUrl = "";
                 generatedImage.classList.add('hidden');
@@ -526,6 +535,7 @@
                 return null;
             } finally {
                 hideLoading(loadingSpinner);
+                console.log("callImagenAPI: Finally block executed (spinner hidden)."); // Debug 10
             }
         }
 
