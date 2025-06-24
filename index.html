@@ -46,6 +46,14 @@
             font-size: 1.125rem; /* text-lg */
             text-align: center;
         }
+        /* Styles for saved items */
+        .saved-item {
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .saved-item:hover {
+            background-color: #e5e7eb; /* Light gray on hover */
+        }
     </style>
 </head>
 <body class="flex flex-col items-center justify-center min-h-screen p-4">
@@ -117,16 +125,33 @@
             <p id="imagePlaceholder" class="image-placeholder-text">Your generated scene will appear here.</p>
         </div>
 
-        <!-- Download Button -->
-        <div class="flex justify-center mt-4">
+        <!-- Action Buttons (Download, Save) -->
+        <div class="flex flex-col md:flex-row justify-center gap-4 mt-4">
             <button id="downloadButton" disabled
-                    class="bg-purple-600 text-white p-3 rounded-lg font-semibold hover:bg-purple-700 transition duration-300 ease-in-out shadow-md opacity-50 cursor-not-allowed">
+                    class="flex-1 bg-purple-600 text-white p-3 rounded-lg font-semibold hover:bg-purple-700 transition duration-300 ease-in-out shadow-md opacity-50 cursor-not-allowed">
                 Download Image
             </button>
+            <button id="saveButton" disabled
+                    class="flex-1 bg-yellow-600 text-white p-3 rounded-lg font-semibold hover:bg-yellow-700 transition duration-300 ease-in-out shadow-md opacity-50 cursor-not-allowed">
+                Save to Favorites
+            </button>
+        </div>
+
+        <!-- Saved Verses Section -->
+        <div class="mt-10 pt-8 border-t border-gray-300">
+            <h2 class="text-3xl font-bold text-center text-gray-800 mb-6">Saved Scenes</h2>
+            <div id="savedVersesList" class="space-y-3 bg-gray-100 p-4 rounded-xl">
+                <p class="text-center text-gray-500" id="noSavedVersesMessage">No scenes saved yet.</p>
+                <!-- Saved scenes will be dynamically loaded here -->
+            </div>
         </div>
     </div>
 
     <script>
+        // ULTIMATE DEBUGGING: This alert should pop up immediately if the script loads.
+        // alert("JavaScript script loaded!"); // Removed as it was confirmed to work in Canvas
+        console.log("Script execution started.");
+
         // --- Element References ---
         const bookInput = document.getElementById('bookInput');
         const chapterInput = document.getElementById('chapterInput');
@@ -136,15 +161,23 @@
         const generateButton = document.getElementById('generateButton');
         const clearButton = document.getElementById('clearButton');
         const downloadButton = document.getElementById('downloadButton');
+        const saveButton = document.getElementById('saveButton'); // New button
         const messageArea = document.getElementById('messageArea');
         const verseDisplayArea = document.getElementById('verseDisplayArea');
         const imageContainer = document.getElementById('imageContainer');
         const generatedImage = document.getElementById('generatedImage');
         const loadingSpinner = document.getElementById('loadingSpinner');
         const imagePlaceholder = document.getElementById('imagePlaceholder');
+        const savedVersesList = document.getElementById('savedVersesList'); // New list container
+        const noSavedVersesMessage = document.getElementById('noSavedVersesMessage'); // New placeholder
 
         let currentVerseText = ""; // Stores the retrieved verse text
         let currentImageUrl = ""; // Stores the generated image URL for download
+        let currentParsedRef = null; // Stores the parsed reference of the current verse
+        let currentStyle = ""; // Stores the style of the current generated image
+
+        // --- Data Storage: List of Dictionaries ---
+        let savedScenes = []; // This will hold our list of dictionaries
 
         // --- Helper Functions for UI feedback ---
         function showMessage(type, message) {
@@ -166,9 +199,124 @@
             element.classList.add('hidden');
         }
 
+        // --- Data Persistence Functions (localStorage) ---
+        function loadSavedScenes() {
+            const storedScenes = localStorage.getItem('bibleStoryScenes');
+            if (storedScenes) {
+                try {
+                    savedScenes = JSON.parse(storedScenes);
+                    console.log("Loaded saved scenes:", savedScenes);
+                } catch (e) {
+                    console.error("Error parsing saved scenes from localStorage:", e);
+                    savedScenes = []; // Reset if corrupted
+                }
+            } else {
+                savedScenes = [];
+            }
+            renderSavedScenes(); // Always re-render after loading
+        }
+
+        function saveScenesToLocalStorage() {
+            localStorage.setItem('bibleStoryScenes', JSON.stringify(savedScenes));
+            console.log("Saved scenes to localStorage.");
+        }
+
+        // --- Rendering Saved Scenes List ---
+        function renderSavedScenes() {
+            savedVersesList.innerHTML = ''; // Clear current list
+            if (savedScenes.length === 0) {
+                showLoading(noSavedVersesMessage); // Show "No scenes saved yet."
+            } else {
+                hideLoading(noSavedVersesMessage); // Hide it
+                savedScenes.forEach((scene, index) => {
+                    const sceneElement = document.createElement('div');
+                    sceneElement.id = `saved-scene-${scene.id}`; // Assign a unique ID
+                    sceneElement.className = 'saved-item bg-white p-3 rounded-lg shadow-sm flex items-center justify-between text-gray-800';
+                    sceneElement.innerHTML = `
+                        <div class="flex-1 truncate">
+                            <span class="font-semibold">${scene.reference}</span>
+                            <span class="text-sm text-gray-600 block italic">${scene.style ? '(' + scene.style + ')' : ''}</span>
+                        </div>
+                        <button class="delete-btn text-red-500 hover:text-red-700 text-lg ml-4" data-id="${scene.id}">&times;</button>
+                    `;
+                    savedVersesList.appendChild(sceneElement);
+
+                    // Add click listener to load scene
+                    sceneElement.addEventListener('click', (event) => {
+                        // Prevent loading when clicking the delete button
+                        if (!event.target.classList.contains('delete-btn')) {
+                            loadSceneIntoMainApp(scene);
+                        }
+                    });
+
+                    // Add click listener for delete button
+                    const deleteButton = sceneElement.querySelector('.delete-btn');
+                    deleteButton.addEventListener('click', (event) => {
+                        event.stopPropagation(); // Prevent load event from firing
+                        deleteScene(scene.id);
+                    });
+                });
+            }
+        }
+
+        // --- Load Saved Scene into Main App ---
+        function loadSceneIntoMainApp(scene) {
+            // Clear current form and results
+            clearForm(false); // Do not clear savedScenes on load
+
+            // Populate inputs
+            bookInput.value = scene.reference.split(' ')[0]; // Basic split, may need refinement for "1 John"
+            const chapVerse = scene.reference.split(' ').slice(1).join(' ');
+            if (chapVerse.includes(':')) {
+                chapterInput.value = chapVerse.split(':')[0];
+                verseInput.value = chapVerse.split(':')[1];
+            } else {
+                chapterInput.value = chapVerse; // Whole chapter, no verse part
+                verseInput.value = '';
+            }
+            styleSelect.value = scene.style || '';
+
+            currentVerseText = scene.verse_text;
+            currentImageUrl = scene.image_url;
+            currentParsedRef = { // Reconstruct parsedRef for potential re-generation
+                book: bookInput.value.trim(),
+                chapter: parseInt(chapterInput.value),
+                start_verse: scene.reference.includes(':') ? parseInt(scene.reference.split(':')[1].split('-')[0]) : null,
+                end_verse: scene.reference.includes(':') && scene.reference.split(':')[1].includes('-') ? parseInt(scene.reference.split(':')[1].split('-')[1]) : null
+            };
+            currentStyle = scene.style || '';
+
+
+            verseDisplayArea.textContent = currentVerseText;
+            verseDisplayArea.classList.remove('hidden');
+            generatedImage.src = currentImageUrl;
+            generatedImage.classList.remove('hidden');
+            imageContainer.classList.remove('hidden'); // Ensure image container is shown
+            hideLoading(imagePlaceholder); // Hide placeholder if image is loaded
+
+            generateButton.disabled = false;
+            generateButton.classList.remove('opacity-50', 'cursor-not-allowed');
+            downloadButton.disabled = false;
+            downloadButton.classList.remove('opacity-50', 'cursor-not-allowed');
+            saveButton.disabled = false; // Enable save button (though it's already saved, allows re-saving if user modifies)
+            saveButton.classList.remove('opacity-50', 'cursor-not-allowed');
+
+
+            showMessage('info', `Loaded scene for: ${scene.reference}`);
+        }
+
+        // --- Delete Saved Scene ---
+        function deleteScene(idToDelete) {
+            savedScenes = savedScenes.filter(scene => scene.id !== idToDelete);
+            saveScenesToLocalStorage();
+            renderSavedScenes();
+            showMessage('success', 'Scene deleted.');
+        }
+
+
         // --- Function to Validate Bible Reference (JS Equivalent of Python's validate_bible_reference) ---
         function validateBibleReferenceJS(book, chapter, verse) {
-            console.log("Validating reference:", { book, chapter, verse }); // Debug log
+            console.log("Validating reference:", { book, chapter, verse });
             if (!book || !chapter) {
                 showMessage('error', 'Please enter at least a Book and Chapter.');
                 return null;
@@ -198,7 +346,7 @@
                 }
             }
             clearMessages();
-            console.log("Validation successful, parsed reference:", { book: book.trim(), chapter: parseInt(chapter), start_verse: parsedVerse, end_verse: parsedEndVerse }); // Debug log
+            console.log("Validation successful, parsed reference:", { book: book.trim(), chapter: parseInt(chapter), start_verse: parsedVerse, end_verse: parsedEndVerse });
             return {
                 book: book.trim(),
                 chapter: parseInt(chapter),
@@ -223,7 +371,9 @@
                     apiUrl += `:${startVerse}`;
                 }
             }
-            console.log("Bible API URL:", apiUrl); // Debug log
+            // bible-api.com doesn't require a translation param for KJV, but if you wanted
+            // a specific version for other APIs, you might add: `?translation=kjv`
+            console.log("Bible API URL:", apiUrl);
 
             try {
                 const response = await fetch(apiUrl);
@@ -235,7 +385,7 @@
                     }
                 }
                 const data = await response.json();
-                console.log("Bible API Response data:", data); // Debug log
+                console.log("Bible API Response data:", data);
 
                 if (data && data.verses && Array.isArray(data.verses)) {
                     let combinedText = data.verses.map(v => {
@@ -277,12 +427,14 @@
         // --- Function to Call AI Image Generation (JS Equivalent of Python's generate_and_display_image) ---
         async function callImagenAPI(imagePrompt) {
             clearMessages();
-            hideLoading(imagePlaceholder); // Hide placeholder text
-            showLoading(loadingSpinner);   // Show spinner
-            imageContainer.classList.remove('hidden'); // Ensure container is visible for spinner
-            generatedImage.classList.add('hidden'); // Hide previous image
-            downloadButton.disabled = true; // Disable download button during generation
+            hideLoading(imagePlaceholder);
+            showLoading(loadingSpinner);
+            imageContainer.classList.remove('hidden');
+            generatedImage.classList.add('hidden');
+            downloadButton.disabled = true;
             downloadButton.classList.add('opacity-50', 'cursor-not-allowed');
+            saveButton.disabled = true; // Disable save button during generation
+            saveButton.classList.add('opacity-50', 'cursor-not-allowed');
 
 
             const apiKey = ""; // Canvas will provide this at runtime. DO NOT change.
@@ -317,48 +469,95 @@
                     const imageBase64 = result.predictions[0]["bytesBase64Encoded"];
                     const imageUrl = `data:image/png;base64,${imageBase64}`;
                     generatedImage.src = imageUrl;
-                    generatedImage.classList.remove('hidden'); // Show the image
-                    currentImageUrl = imageUrl; // Store for download
+                    generatedImage.classList.remove('hidden');
+                    currentImageUrl = imageUrl; // Store for download and save
                     showMessage('success', 'Image generated successfully!');
-                    downloadButton.disabled = false; // Enable download button
+                    downloadButton.disabled = false;
                     downloadButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                    saveButton.disabled = false; // Enable save button after successful generation
+                    saveButton.classList.remove('opacity-50', 'cursor-not-allowed');
                     return imageUrl;
                 } else {
                     throw new Error('Unexpected API response structure or no image generated.');
                 }
             } catch (error) {
                 console.error('Error generating image:', error);
-                generatedImage.src = ""; // Clear any previous image
-                currentImageUrl = ""; // Clear stored URL
-                generatedImage.classList.add('hidden'); // Ensure image remains hidden
-                showLoading(imagePlaceholder); // Show placeholder if error
+                generatedImage.src = "";
+                currentImageUrl = "";
+                generatedImage.classList.add('hidden');
+                showLoading(imagePlaceholder);
                 showMessage('error', `Image generation failed: ${error.message}`);
                 return null;
             } finally {
-                hideLoading(loadingSpinner); // Hide spinner
+                hideLoading(loadingSpinner);
             }
         }
 
-        // --- Clear Form Function ---
-        function clearForm() {
+        // --- Save Scene Function ---
+        function saveCurrentScene() {
+            if (!currentVerseText || !currentImageUrl) {
+                showMessage('error', 'Nothing to save. Please generate an image first.');
+                return;
+            }
+
+            // Check if this exact verse and style combo is already saved
+            const isAlreadySaved = savedScenes.some(scene =>
+                scene.reference === `${bookInput.value.trim()} ${chapterInput.value}${verseInput.value ? ':' + verseInput.value.trim() : ''}` &&
+                scene.style === styleSelect.value
+            );
+
+            if (isAlreadySaved) {
+                showMessage('info', 'This scene is already saved!');
+                return;
+            }
+
+            const newScene = {
+                id: Date.now().toString(), // Simple unique ID for now (timestamp)
+                reference: `${bookInput.value.trim()} ${chapterInput.value}${verseInput.value ? ':' + verseInput.value.trim() : ''}`,
+                verse_text: currentVerseText,
+                image_url: currentImageUrl,
+                style: styleSelect.value,
+                timestamp: new Date().toISOString(), // ISO 8601 format
+                is_favorite: true // Automatically a favorite when saved
+            };
+
+            savedScenes.unshift(newScene); // Add to the beginning of the array
+            saveScenesToLocalStorage();
+            renderSavedScenes();
+            showMessage('success', 'Scene saved to favorites!');
+        }
+
+        // --- Clear Form Function (modified to allow not clearing savedScenes) ---
+        function clearForm(clearSavedToo = true) {
             bookInput.value = '';
             chapterInput.value = '';
             verseInput.value = '';
-            styleSelect.value = ''; // Reset dropdown
+            styleSelect.value = '';
             currentVerseText = "";
             currentImageUrl = "";
+            currentParsedRef = null;
+            currentStyle = "";
             clearMessages();
             verseDisplayArea.classList.add('hidden');
             verseDisplayArea.textContent = '';
-            generatedImage.src = ""; // Clear image source
-            generatedImage.classList.add('hidden'); // Hide image
-            hideLoading(loadingSpinner); // Hide spinner
-            showLoading(imagePlaceholder); // Show placeholder text
-            generateButton.disabled = true; // Disable generate button
+            generatedImage.src = "";
+            generatedImage.classList.add('hidden');
+            hideLoading(loadingSpinner);
+            showLoading(imagePlaceholder);
+            generateButton.disabled = true;
             generateButton.classList.add('opacity-50', 'cursor-not-allowed');
-            downloadButton.disabled = true; // Disable download button
+            downloadButton.disabled = true;
             downloadButton.classList.add('opacity-50', 'cursor-not-allowed');
-            imageContainer.classList.remove('hidden'); // Ensure container is visible to show placeholder
+            saveButton.disabled = true; // Disable save button
+            saveButton.classList.add('opacity-50', 'cursor-not-allowed');
+            imageContainer.classList.remove('hidden');
+
+            if (clearSavedToo) {
+                // Not actually clearing the savedScenes array here, but clearing localStorage
+                // and re-rendering to reflect an empty state if desired for a full reset.
+                // For a true "clear saved", you'd set savedScenes = []; and save/render.
+                // Let's make this more explicit if needed for a "Clear All Saved" feature.
+            }
         }
 
         // --- Download Image Function ---
@@ -366,7 +565,9 @@
             if (currentImageUrl) {
                 const a = document.createElement('a');
                 a.href = currentImageUrl;
-                a.download = `bible_scene_${bookInput.value || 'unknown'}_${chapterInput.value || 'unknown'}_${verseInput.value || 'unknown'}.png`;
+                // Construct a more descriptive filename
+                const filename = `bible_scene_${(bookInput.value || 'unknown').replace(/\s/g, '_')}_${chapterInput.value || 'unknown'}${verseInput.value ? '-' + verseInput.value.replace(/\s/g, '') : ''}_${(styleSelect.value || 'default').replace(/\s/g, '_')}.png`;
+                a.download = filename;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -378,60 +579,75 @@
 
 
         // --- Event Listeners ---
-        lookupButton.addEventListener('click', async () => {
-            console.log("Look Up Verse button clicked!"); // Debug log to ensure button click is registered
-            clearMessages();
-            verseDisplayArea.classList.add('hidden');
-            generatedImage.classList.add('hidden');
-            hideLoading(loadingSpinner);
-            showLoading(imagePlaceholder); // Show placeholder
-            imageContainer.classList.remove('hidden'); // Ensure container is visible
-            generateButton.disabled = true;
-            generateButton.classList.add('opacity-50', 'cursor-not-allowed');
-            downloadButton.disabled = true; // Disable download button
-            downloadButton.classList.add('opacity-50', 'cursor-not-allowed');
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("DOM fully loaded and parsed. Attaching event listeners.");
+
+            // Load saved scenes from localStorage on app start
+            loadSavedScenes();
+
+            lookupButton.addEventListener('click', async () => {
+                console.log("Look Up Verse button clicked!");
+                clearMessages();
+                verseDisplayArea.classList.add('hidden');
+                generatedImage.classList.add('hidden');
+                hideLoading(loadingSpinner);
+                showLoading(imagePlaceholder);
+                imageContainer.classList.remove('hidden');
+                generateButton.disabled = true;
+                generateButton.classList.add('opacity-50', 'cursor-not-allowed');
+                downloadButton.disabled = true;
+                downloadButton.classList.add('opacity-50', 'cursor-not-allowed');
+                saveButton.disabled = true; // Disable save button on new lookup
+                saveButton.classList.add('opacity-50', 'cursor-not-allowed');
 
 
-            const book = bookInput.value;
-            const chapter = chapterInput.value;
-            const verse = verseInput.value;
+                const book = bookInput.value;
+                const chapter = chapterInput.value;
+                const verse = verseInput.value;
 
-            const parsedRef = validateBibleReferenceJS(book, chapter, verse);
-            console.log("Parsed Reference from validation:", parsedRef); // Debug log
+                currentParsedRef = validateBibleReferenceJS(book, chapter, verse); // Store parsed ref
+                console.log("Parsed Reference from validation:", currentParsedRef);
 
-            if (parsedRef) {
-                showMessage('info', 'Retrieving verse text...');
-                currentVerseText = await getBibleVerseTextJS(parsedRef);
-                console.log("Retrieved Verse Text:", currentVerseText); // Debug log
-                if (currentVerseText) {
-                    verseDisplayArea.textContent = currentVerseText;
-                    verseDisplayArea.classList.remove('hidden');
-                    showMessage('success', 'Verse retrieved! Ready to generate image.');
-                    generateButton.disabled = false;
-                    generateButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                if (currentParsedRef) {
+                    showMessage('info', 'Retrieving verse text...');
+                    currentVerseText = await getBibleVerseTextJS(currentParsedRef);
+                    console.log("Retrieved Verse Text:", currentVerseText);
+                    if (currentVerseText) {
+                        verseDisplayArea.textContent = currentVerseText;
+                        verseDisplayArea.classList.remove('hidden');
+                        showMessage('success', 'Verse retrieved! Ready to generate image.');
+                        generateButton.disabled = false;
+                        generateButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                    } else {
+                        currentVerseText = "";
+                        currentParsedRef = null;
+                    }
                 } else {
                     currentVerseText = "";
+                    currentParsedRef = null;
                 }
-            } else {
-                currentVerseText = "";
-            }
+            });
+
+            generateButton.addEventListener('click', async () => {
+                if (!currentVerseText || !currentParsedRef) {
+                    showMessage('error', 'Please look up a Bible verse first.');
+                    return;
+                }
+
+                currentStyle = styleSelect.value; // Store current style
+                const finalPrompt = generateImagePromptJS(currentVerseText, currentStyle);
+
+                showMessage('info', 'Sending request to AI...');
+                await callImagenAPI(finalPrompt);
+            });
+
+            clearButton.addEventListener('click', clearForm);
+            downloadButton.addEventListener('click', downloadImage);
+            saveButton.addEventListener('click', saveCurrentScene); // Attach save function
+
+            // Initial setup on page load
+            clearForm();
         });
-
-        generateButton.addEventListener('click', async () => {
-            if (!currentVerseText) {
-                showMessage('error', 'Please look up a Bible verse first.');
-                return;
-            }
-
-            const selectedStyle = styleSelect.value;
-            const finalPrompt = generateImagePromptJS(currentVerseText, selectedStyle);
-
-            showMessage('info', 'Sending request to AI...');
-            await callImagenAPI(finalPrompt);
-        });
-
-        clearButton.addEventListener('click', clearForm); // Attach clear function to button
-        downloadButton.addEventListener('click', downloadImage); // Attach download function
-
-        // Initial setup on page load
-        clearForm(); // Initialize form state and hide image/verse areas
+    </script>
+</body>
+</html>
