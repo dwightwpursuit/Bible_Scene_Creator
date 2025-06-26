@@ -1,4 +1,5 @@
 📖 Bible Story Scene Creator ✨
+
 Visualize scripture like never before! The Bible Story Scene Creator is a web application that allows users to generate unique AI-powered visual interpretations of Bible verses, perfect for Sunday School teachers, content creators, and anyone looking for a fresh perspective on scripture.
 
 About This Project
